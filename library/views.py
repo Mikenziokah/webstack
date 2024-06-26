@@ -1,6 +1,7 @@
 from django.shortcuts import redirect, render
 from django.http import HttpResponseRedirect
 from . import forms, models
+from django.http import HttpResponseRedirect
 from django.contrib.auth.models import Group
 from django.contrib import auth
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -8,22 +9,24 @@ from datetime import datetime, timedelta, date
 from django.core.mail import send_mail
 from librarymanagement.settings import EMAIL_HOST_USER
 
+
 def home_view(request):
     if request.user.is_authenticated:
         return HttpResponseRedirect('afterlogin')
     return render(request, 'library/index.html')
 
-# For showing signup/login button for student
+# for showing signup/login button for student
 def studentclick_view(request):
     if request.user.is_authenticated:
         return HttpResponseRedirect('afterlogin')
     return render(request, 'library/studentclick.html')
 
-# For showing signup/login button for teacher
+# for showing signup/login button for teacher
 def adminclick_view(request):
     if request.user.is_authenticated:
         return HttpResponseRedirect('afterlogin')
     return render(request, 'library/adminclick.html')
+
 
 def studentsignup_view(request):
     form1 = forms.StudentUserForm()
@@ -38,36 +41,42 @@ def studentsignup_view(request):
             user.save()
             f2 = form2.save(commit=False)
             f2.user = user
-            f2.save()
+            user2 = f2.save()
+
             my_student_group = Group.objects.get_or_create(name='STUDENT')
             my_student_group[0].user_set.add(user)
-            return HttpResponseRedirect('studentlogin')
+
+        return HttpResponseRedirect('studentlogin')
     return render(request, 'library/studentsignup.html', context=mydict)
 
+
 def is_admin(user):
-    return user.is_superuser or user.is_staff
+    if user.is_superuser or user.is_staff:
+        return True
+    else:
+        return False
 
 def is_student(user):
     return user.groups.filter(name='STUDENT').exists()
 
-@login_required
 def afterlogin_view(request):
     if is_admin(request.user):
         return render(request, 'library/adminafterlogin.html')
+    
     elif is_student(request.user):
         return render(request, 'library/studentafterlogin.html')
-    else:
-        # Handle case where user is neither admin nor student
-        return redirect('home')
+
 
 @login_required(login_url='adminlogin')
 @user_passes_test(is_admin)
 def addbook_view(request):
+    # now it is empty book form for sending to html
     form = forms.BookForm()
     if request.method == 'POST':
+        # now this form have data from html
         form = forms.BookForm(request.POST)
         if form.is_valid():
-            form.save()
+            user = form.save()
             return render(request, 'library/bookadded.html')
     return render(request, 'library/addbook.html', {'form': form})
 
@@ -77,11 +86,13 @@ def viewbook_view(request):
     books = models.Book.objects.all()
     return render(request, 'library/viewbook.html', {'books': books})
 
+
 @login_required(login_url='adminlogin')
 @user_passes_test(is_admin)
 def issuebook_view(request):
     form = forms.IssuedBookForm()
     if request.method == 'POST':
+        # now this form have data from html
         form = forms.IssuedBookForm(request.POST)
         if form.is_valid():
             obj = models.IssuedBook()
@@ -91,6 +102,7 @@ def issuebook_view(request):
             return render(request, 'library/bookissued.html')
     return render(request, 'library/issuebook.html', {'form': form})
 
+
 @login_required(login_url='adminlogin')
 @user_passes_test(is_admin)
 def viewissuedbook_view(request):
@@ -99,13 +111,16 @@ def viewissuedbook_view(request):
     for ib in issuedbooks:
         issdate = f"{ib.issuedate.day}-{ib.issuedate.month}-{ib.issuedate.year}"
         expdate = f"{ib.expirydate.day}-{ib.expirydate.month}-{ib.expirydate.year}"
+        # fine calculation
         days = (date.today() - ib.issuedate).days
         fine = (days - 15) * 10 if days > 15 else 0
+
         books = list(models.Book.objects.filter(isbn=ib.isbn))
         students = list(models.StudentExtra.objects.filter(enrollment=ib.enrollment))
-        for i, book in enumerate(books):
-            t = (students[i].get_name, students[i].enrollment, book.name, book.author, issdate, expdate, fine, ib.status)
+        for book, student in zip(books, students):
+            t = (student.get_name, student.enrollment, book.name, book.author, issdate, expdate, fine, ib.status)
             li.append(t)
+
     return render(request, 'library/viewissuedbook.html', {'li': li})
 
 @login_required(login_url='adminlogin')
@@ -113,6 +128,7 @@ def viewissuedbook_view(request):
 def viewstudent_view(request):
     students = models.StudentExtra.objects.all()
     return render(request, 'library/viewstudent.html', {'students': students})
+
 
 @login_required(login_url='studentlogin')
 def viewissuedbookbystudent(request):
@@ -128,7 +144,7 @@ def viewissuedbookbystudent(request):
         days = (date.today() - ib.issuedate).days
         fine = (days - 15) * 10 if days > 15 else 0
         li2.append((issdate, expdate, fine, ib.status, ib.id))
-    return render(request, 'library/viewissuedbookbystudent.html', {'li1': li1, {'li2': li2}})
+    return render(request, 'library/viewissuedbookbystudent.html', {'li1': li1, 'li2': li2})
 
 def returnbook(request, id):
     issued_book = models.IssuedBook.objects.get(pk=id)
@@ -147,7 +163,7 @@ def contactus_view(request):
             email = sub.cleaned_data['Email']
             name = sub.cleaned_data['Name']
             message = sub.cleaned_data['Message']
-            send_mail(f'{name} || {email}', message, EMAIL_HOST_USER, ['mylibrary@gmail.com'], fail_silently=False)
+            send_mail(f"{name} || {email}", message, EMAIL_HOST_USER, ['mylibrary@gmail.com'], fail_silently=False)
             return render(request, 'library/contactussuccess.html')
     return render(request, 'library/contactus.html', {'form': sub})
 
